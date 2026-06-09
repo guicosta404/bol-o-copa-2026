@@ -1,0 +1,30 @@
+# Sistema
+.DS_Store
+Thumbs.db
+
+# Editores
+.vscode/
+.idea/
+
+# Python
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.venv/
+venv/
+
+# Node
+node_modules/
+dist/
+build/
+.next/
+
+# Dados temporarios
+data/tmp/
+*.log
+
+# Configuracao local
+.env
+.streamlit/secrets.toml
