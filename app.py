@@ -10,6 +10,7 @@ from src.groups import GROUPS, Group, team_lookup
 from src.rules import (
     KNOCKOUT_PHASES,
     build_knockout_matches,
+    build_official_knockout_order,
     build_qualified,
     serialize_knockout,
     serialize_selections,
@@ -26,6 +27,8 @@ GROUP_POSITION_OPTIONS: tuple[tuple[str, str], ...] = (
 )
 GROUP_POSITION_BY_LABEL = {label: key for key, label in GROUP_POSITION_OPTIONS}
 GROUP_POSITION_LABELS = tuple(label for _key, label in GROUP_POSITION_OPTIONS)
+ACTIVE_GROUP_KEY = "active_group_code"
+KNOCKOUT_SCROLL_KEY = "knockout_scroll_left"
 
 
 st.set_page_config(
@@ -33,6 +36,497 @@ st.set_page_config(
     page_icon="🏆",
     layout="wide",
     initial_sidebar_state="collapsed",
+)
+
+
+GROUPS_SELECTOR_HTML = '<div id="world-cup-groups-selector"></div>'
+
+GROUPS_SELECTOR_CSS = """
+#world-cup-groups-selector {
+    color: #111111;
+    font-family: Arial, Helvetica, sans-serif;
+}
+
+.groups-picker {
+    width: 100%;
+}
+
+.groups-tabs {
+    display: none;
+}
+
+.groups-track {
+    display: grid;
+    gap: 28px 24px;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.group-card {
+    min-width: 0;
+}
+
+.group-card-heading {
+    border-bottom: 2px solid #111111;
+    color: #111111;
+    font-size: 23px;
+    font-weight: 900;
+    line-height: 1;
+    margin: 0 0 14px;
+    padding-bottom: 13px;
+    text-align: center;
+}
+
+.group-card-head,
+.group-card-row {
+    align-items: center;
+    display: grid;
+    gap: 8px;
+    grid-template-columns: minmax(0, 1fr) 104px;
+}
+
+.group-card-head {
+    color: #737b82;
+    font-size: 13px;
+    min-height: 25px;
+}
+
+.group-position-title {
+    line-height: 1.2;
+}
+
+.group-position-head {
+    align-items: center;
+    display: grid;
+    gap: 6px;
+    grid-template-columns: 1fr 1fr;
+    text-align: center;
+}
+
+.group-position-head b {
+    color: #6d7580;
+    font-size: 13px;
+}
+
+.group-card-list {
+    display: grid;
+    gap: 6px;
+}
+
+.group-team {
+    align-items: center;
+    background: #eeeeee;
+    color: #050505;
+    display: flex;
+    font-size: 16px;
+    gap: 10px;
+    min-height: 46px;
+    min-width: 0;
+    padding: 0 12px;
+}
+
+.group-flag {
+    flex: 0 0 28px;
+    font-size: 21px;
+    line-height: 1;
+}
+
+.group-name {
+    line-height: 1.15;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.group-options {
+    background: #eeeeee;
+    display: grid;
+    gap: 6px;
+    grid-template-columns: 1fr 1fr;
+    min-height: 46px;
+    padding: 4px;
+}
+
+.group-option {
+    appearance: none;
+    background: transparent;
+    border: 0;
+    cursor: pointer;
+    display: grid;
+    min-height: 38px;
+    padding: 0;
+    place-items: center;
+    touch-action: manipulation;
+    -webkit-tap-highlight-color: transparent;
+}
+
+.group-option-circle {
+    background: #eeeeee;
+    border: 3px solid #04ad50;
+    border-radius: 999px;
+    display: block;
+    height: 34px;
+    position: relative;
+    width: 34px;
+}
+
+.group-option.selected .group-option-circle::after {
+    background: #04ad50;
+    border-radius: 999px;
+    content: "";
+    height: 18px;
+    left: 50%;
+    position: absolute;
+    top: 50%;
+    transform: translate(-50%, -50%);
+    width: 18px;
+}
+
+.group-option:hover .group-option-circle,
+.group-option:focus-visible .group-option-circle {
+    box-shadow: 0 0 0 4px rgba(4, 173, 80, .16);
+}
+
+.group-random {
+    align-items: center;
+    appearance: none;
+    background: #08ad4e;
+    border: 0;
+    border-radius: 4px;
+    color: #6d7580;
+    cursor: pointer;
+    display: flex;
+    gap: 10px;
+    justify-content: center;
+    margin-top: 12px;
+    min-height: 58px;
+    padding: 0 18px;
+    touch-action: manipulation;
+    width: 100%;
+    -webkit-tap-highlight-color: transparent;
+}
+
+.group-random-icon {
+    color: #ffffff;
+    font-size: 28px;
+    font-weight: 800;
+    line-height: 1;
+}
+
+.group-random-text {
+    color: #ffffff;
+    font-size: 16px;
+    font-weight: 400;
+    letter-spacing: 0;
+    text-transform: uppercase;
+}
+
+@media (max-width: 760px) {
+    .groups-picker {
+        margin-left: -1rem;
+        margin-right: -1rem;
+        overflow: hidden;
+    }
+
+    .groups-tabs {
+        border-bottom: 1px solid #dddddd;
+        display: flex;
+        gap: 0;
+        margin: 2px 0 28px;
+        min-width: max-content;
+        overflow-x: auto;
+        padding: 0 1rem;
+        scrollbar-width: none;
+    }
+
+    .groups-tabs::-webkit-scrollbar {
+        display: none;
+    }
+
+    .group-tab {
+        appearance: none;
+        background: transparent;
+        border: 0;
+        border-radius: 12px 12px 0 0;
+        color: #2f2f2f;
+        cursor: pointer;
+        flex: 0 0 48px;
+        font-size: 28px;
+        font-weight: 400;
+        height: 58px;
+        padding: 0;
+        position: relative;
+        touch-action: manipulation;
+    }
+
+    .group-tab.active {
+        background: #f1f1f1;
+        font-weight: 800;
+    }
+
+    .group-tab.active::after {
+        background: #08ad4e;
+        bottom: 0;
+        content: "";
+        height: 3px;
+        left: 0;
+        position: absolute;
+        right: 0;
+    }
+
+    .groups-track {
+        display: flex;
+        gap: 16px;
+        overflow-x: auto;
+        overflow-y: visible;
+        padding: 0 1rem 10px;
+        scroll-padding-left: 1rem;
+        scroll-snap-type: x mandatory;
+        -webkit-overflow-scrolling: touch;
+    }
+
+    .group-card {
+        flex: 0 0 min(86vw, 360px);
+        scroll-snap-align: start;
+    }
+
+    .group-card-heading {
+        display: none;
+    }
+
+    .group-card-head {
+        gap: 10px;
+        grid-template-columns: minmax(0, 1fr) 104px;
+        margin-bottom: 8px;
+    }
+
+    .group-card-head,
+    .group-position-head b {
+        font-size: 18px;
+    }
+
+    .group-position-title {
+        max-width: 92px;
+    }
+
+    .group-card-row {
+        gap: 0;
+        grid-template-columns: minmax(0, 1fr) 104px;
+    }
+
+    .group-team {
+        font-size: 24px;
+        min-height: 74px;
+        padding: 0 14px;
+    }
+
+    .group-flag {
+        flex-basis: 44px;
+        font-size: 27px;
+    }
+
+    .group-name {
+        overflow: visible;
+        text-overflow: clip;
+        white-space: normal;
+    }
+
+    .group-options {
+        gap: 4px;
+        min-height: 74px;
+        padding: 0 8px 0 0;
+    }
+
+    .group-option-circle {
+        border-width: 4px;
+        height: 34px;
+        width: 34px;
+    }
+
+    .group-random {
+        border-radius: 4px;
+        margin-top: 12px;
+        min-height: 66px;
+    }
+
+    .group-random-text {
+        font-size: 20px;
+    }
+
+    .group-random-icon {
+        font-size: 30px;
+    }
+}
+"""
+
+GROUPS_SELECTOR_JS = """
+export default function (component) {
+  const { data, parentElement, setTriggerValue } = component
+  const root = parentElement.querySelector("#world-cup-groups-selector")
+  if (!root || !data) return
+
+  const groups = Array.isArray(data.groups) ? data.groups : []
+  const positions = Array.isArray(data.positions) ? data.positions : []
+  const selectedByGroup = data.selected_by_group ?? {}
+  const currentGroup = groups.some((group) => group.code === data.current_group)
+    ? data.current_group
+    : groups[0]?.code
+
+  root.innerHTML = ""
+
+  const picker = el("div", "groups-picker")
+  const tabs = el("div", "groups-tabs")
+  const track = el("div", "groups-track")
+
+  groups.forEach((group, index) => {
+    const tab = el("button", ["group-tab", group.code === currentGroup ? "active" : ""])
+    tab.type = "button"
+    tab.textContent = group.code ?? ""
+    tab.onclick = () => {
+      root.querySelectorAll(".group-tab").forEach((item) => item.classList.remove("active"))
+      tab.classList.add("active")
+      root.querySelector(`#group-card-${group.code}`)?.scrollIntoView({
+        behavior: "smooth",
+        block: "nearest",
+        inline: "start",
+      })
+    }
+    tabs.appendChild(tab)
+    track.appendChild(groupCard(group, positions, selectedByGroup[group.code] ?? {}))
+  })
+
+  picker.appendChild(tabs)
+  picker.appendChild(track)
+  root.appendChild(picker)
+  requestAnimationFrame(() => scrollToGroup(currentGroup))
+
+  function groupCard(group, positionLabels, selectedByTeam) {
+    const card = el("div", "group-card")
+    card.id = `group-card-${group.code}`
+
+    const heading = el("div", "group-card-heading")
+    heading.textContent = `Grupo ${group.code ?? ""}`
+    card.appendChild(heading)
+
+    const head = el("div", "group-card-head")
+    const selectionHead = el("div")
+    selectionHead.textContent = "Seleção"
+    head.appendChild(selectionHead)
+
+    const positionWrap = el("div")
+    const title = el("div", "group-position-title")
+    title.textContent = "Posição no grupo:"
+    const positionHead = el("div", "group-position-head")
+    for (const label of positionLabels) {
+      const item = el("b")
+      item.textContent = label
+      positionHead.appendChild(item)
+    }
+    positionWrap.appendChild(title)
+    positionWrap.appendChild(positionHead)
+    head.appendChild(positionWrap)
+    card.appendChild(head)
+
+    const list = el("div", "group-card-list")
+    for (const team of group.teams ?? []) {
+      list.appendChild(teamRow(group.code, team, positionLabels, selectedByTeam[team.code]))
+    }
+    card.appendChild(list)
+
+    const random = el("button", "group-random")
+    random.type = "button"
+    random.setAttribute("aria-label", `Sorteio aleatório do Grupo ${group.code}`)
+    random.onclick = () => {
+      setTriggerValue("action", {
+        action: "randomize",
+        group_code: group.code,
+        nonce: Date.now(),
+      })
+    }
+    const icon = el("span", "group-random-icon")
+    icon.textContent = "↝"
+    const copy = el("span", "group-random-text")
+    copy.textContent = "Sorteio aleatório"
+    random.appendChild(icon)
+    random.appendChild(copy)
+    card.appendChild(random)
+    return card
+  }
+
+  function teamRow(groupCode, team, positionLabels, selectedLabel) {
+    const row = el("div", "group-card-row")
+
+    const teamCell = el("div", "group-team")
+
+    const flag = el("span", "group-flag")
+    flag.textContent = team.flag ?? ""
+    teamCell.appendChild(flag)
+
+    const name = el("span", "group-name")
+    name.textContent = team.name ?? team.code ?? ""
+    teamCell.appendChild(name)
+    row.appendChild(teamCell)
+
+    const options = el("div", "group-options")
+    options.setAttribute("role", "radiogroup")
+    options.setAttribute("aria-label", `${team.name ?? team.code} no grupo`)
+
+    for (const label of positionLabels) {
+      const option = el("button")
+      const selected = selectedLabel === label
+      option.className = ["group-option", selected ? "selected" : ""].filter(Boolean).join(" ")
+      option.type = "button"
+      option.setAttribute("aria-pressed", selected ? "true" : "false")
+      option.setAttribute("aria-label", `${team.name ?? team.code} em ${label} lugar`)
+      option.appendChild(el("span", "group-option-circle"))
+      option.onclick = () => {
+        setTriggerValue("action", {
+          action: "pick",
+          group_code: groupCode,
+          team_code: team.code,
+          selected_label: label,
+          nonce: Date.now(),
+        })
+      }
+      options.appendChild(option)
+    }
+
+    row.appendChild(options)
+    return row
+  }
+
+  function el(tagName, className) {
+    const node = document.createElement(tagName)
+    if (Array.isArray(className)) {
+      node.className = className.filter(Boolean).join(" ")
+    } else if (className) {
+      node.className = className
+    }
+    return node
+  }
+
+  function scrollToGroup(groupCode) {
+    if (!groupCode || !window.matchMedia("(max-width: 760px)").matches) return
+
+    const card = root.querySelector(`#group-card-${groupCode}`)
+    if (card) {
+      track.scrollLeft = card.offsetLeft - track.offsetLeft
+    }
+
+    const activeTab = Array.from(root.querySelectorAll(".group-tab"))
+      .find((tab) => tab.textContent === groupCode)
+    if (activeTab) {
+      tabs.scrollLeft = activeTab.offsetLeft - tabs.offsetLeft - 16
+    }
+  }
+}
+"""
+
+GROUPS_SELECTOR_COMPONENT = st.components.v2.component(
+    "world_cup_groups_selector",
+    html=GROUPS_SELECTOR_HTML,
+    css=GROUPS_SELECTOR_CSS,
+    js=GROUPS_SELECTOR_JS,
 )
 
 
@@ -46,15 +540,17 @@ BRACKET_CSS = """
 .bracket-scroll {
     background: #ffffff;
     border: 1px solid #e6e6e6;
-    overflow-x: auto;
+    overflow: visible;
     width: 100%;
 }
 
 .bracket-frame {
     background: #ffffff;
     height: 820px;
-    min-width: 1020px;
+    margin: 0 auto;
+    min-width: 0;
     position: relative;
+    width: min(1020px, 100%);
 }
 
 .connector-layer {
@@ -83,15 +579,26 @@ BRACKET_CSS = """
 .bracket-node {
     --node-size: 48px;
     align-items: center;
+    appearance: none;
     background: transparent;
     border: 0;
     color: #1f2a33;
     display: flex;
     gap: 6px;
+    min-height: max(44px, var(--node-size));
     padding: 0;
     position: absolute;
-    transform: translate(-50%, -50%);
+    touch-action: manipulation;
+    -webkit-tap-highlight-color: transparent;
     z-index: 2;
+}
+
+.bracket-node.left {
+    transform: translate(calc(-100% + var(--node-size) / 2), -50%);
+}
+
+.bracket-node.right {
+    transform: translate(calc(var(--node-size) / -2), -50%);
 }
 
 .bracket-node.selectable {
@@ -130,6 +637,7 @@ BRACKET_CSS = """
     font-size: 13px;
     font-weight: 800;
     min-width: 34px;
+    pointer-events: none;
 }
 
 .flag-circle {
@@ -144,6 +652,7 @@ BRACKET_CSS = """
     justify-content: center;
     line-height: 1;
     overflow: hidden;
+    pointer-events: none;
     width: var(--node-size);
 }
 
@@ -225,6 +734,179 @@ BRACKET_CSS = """
     line-height: 1.5;
     margin-top: 10px;
 }
+
+.mobile-bracket-node,
+.mobile-champion-node {
+    --node-size: 52px;
+    align-items: center;
+    appearance: none;
+    background: transparent;
+    border: 0;
+    display: flex;
+    justify-content: center;
+    min-height: max(44px, var(--node-size));
+    min-width: max(44px, var(--node-size));
+    padding: 0;
+    position: absolute;
+    transform: translate(-50%, -50%);
+    touch-action: manipulation;
+    -webkit-tap-highlight-color: transparent;
+    z-index: 2;
+}
+
+.mobile-bracket-node.selectable {
+    cursor: pointer;
+}
+
+.mobile-bracket-node .flag-circle,
+.mobile-champion-node .flag-circle {
+    background: #f5f5f5;
+    border-color: #d2d2d2;
+    box-shadow: none;
+}
+
+.mobile-bracket-node.filled .flag-circle {
+    background: #ffffff;
+}
+
+.mobile-bracket-node.selected .flag-circle {
+    border-color: #05bd4c;
+    box-shadow: 0 0 0 4px rgba(5, 189, 76, .16);
+}
+
+.mobile-bracket-node:focus-visible .flag-circle {
+    outline: 3px solid rgba(5, 189, 76, .28);
+    outline-offset: 3px;
+}
+
+.mobile-seed-label {
+    color: #8a8a8a;
+    font-size: 20px;
+    font-weight: 600;
+    left: 50%;
+    line-height: 1;
+    position: absolute;
+    transform: translateX(-50%);
+    white-space: nowrap;
+}
+
+.mobile-seed-label.top {
+    bottom: calc(100% + 9px);
+}
+
+.mobile-seed-label.bottom {
+    top: calc(100% + 9px);
+}
+
+.mobile-help {
+    color: #05bd4c;
+    font-size: 24px;
+    font-style: italic;
+    font-weight: 900;
+    left: 29%;
+    line-height: 1.55;
+    position: absolute;
+    text-align: center;
+    top: 49%;
+    transform: translate(-50%, -50%);
+    z-index: 3;
+}
+
+.mobile-champion-area {
+    align-items: center;
+    color: #1f2a33;
+    display: flex;
+    flex-direction: column;
+    left: 50%;
+    position: absolute;
+    text-align: center;
+    top: 50%;
+    transform: translate(-50%, -50%);
+    z-index: 3;
+}
+
+.mobile-trophy {
+    color: #cfcfcf;
+    font-size: 62px;
+    line-height: 1;
+    pointer-events: none;
+}
+
+@media (max-width: 760px) {
+    .bracket-scroll {
+        border: 0;
+        margin-left: -1rem;
+        margin-right: -1rem;
+        overflow-x: auto;
+        overflow-y: hidden;
+        padding: 0 1rem;
+        -webkit-overflow-scrolling: touch;
+    }
+
+    .bracket-frame {
+        height: 1260px;
+        margin: 0;
+        min-width: 980px;
+        width: 980px;
+    }
+
+    .bracket-node {
+        --node-size: var(--node-size-mobile, 32px);
+        gap: 0;
+        min-height: 40px;
+        min-width: 40px;
+    }
+
+    .team-code {
+        display: none;
+    }
+
+    .champion-area {
+        max-width: 90px;
+    }
+
+    .champion-help {
+        font-size: 11px;
+        line-height: 1.45;
+        margin-bottom: 18px;
+    }
+
+    .champion-trophy {
+        font-size: 34px;
+        margin-bottom: 4px;
+    }
+
+    .champion-label {
+        font-size: 13px;
+    }
+
+    .champion-node {
+        --node-size: 50px;
+    }
+
+    .champion-node .flag-circle {
+        font-size: 28px;
+    }
+
+    .bracket-empty-copy {
+        font-size: 11px;
+    }
+
+    .mobile-bracket-node {
+        --node-size: var(--mobile-node-size, 52px);
+    }
+
+    .mobile-bracket-node .flag-circle,
+    .mobile-champion-node .flag-circle {
+        font-size: calc(var(--node-size) * .52);
+    }
+
+    .mobile-champion-node {
+        --node-size: 116px;
+        position: static;
+        transform: none;
+    }
+}
 """
 
 BRACKET_JS = """
@@ -236,6 +918,8 @@ export default function (component) {
   const phases = data.phases ?? []
   const teams = data.teams ?? {}
   const initial = data.initial ?? []
+  const initialLabels = normalizeArray(data.initial_labels, 32)
+  const scrollLeft = Number(data.scroll_left ?? 0)
   const winners = data.winners ?? {}
   const winnerArrays = {
     dezesseis_avos: normalizeArray(winners.dezesseis_avos, 16),
@@ -245,6 +929,7 @@ export default function (component) {
     final: normalizeArray(winners.final, 1),
   }
 
+  const compact = root.getBoundingClientRect().width < 700
   const xLeft = [5.4, 14.8, 24.3, 33.5, 42.0]
   const xRight = [94.6, 85.2, 75.7, 66.5, 58.0]
   const nodeSizes = [42, 54, 62, 70, 78]
@@ -274,6 +959,14 @@ export default function (component) {
   root.innerHTML = ""
   const scroll = document.createElement("div")
   scroll.className = "bracket-scroll"
+
+  if (compact) {
+    drawMobileBracket(scroll)
+    root.appendChild(scroll)
+    restoreScroll(scroll)
+    return
+  }
+
   const frame = document.createElement("div")
   frame.className = "bracket-frame"
   const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg")
@@ -287,6 +980,7 @@ export default function (component) {
   drawChampion(frame, winnerArrays.final[0])
   scroll.appendChild(frame)
   root.appendChild(scroll)
+  restoreScroll(scroll)
 
   function normalizeArray(value, length) {
     const source = Array.isArray(value) ? value : []
@@ -300,6 +994,11 @@ export default function (component) {
   function yPositions(count) {
     if (count === 1) return [50]
     return Array.from({ length: count }, (_, index) => 3 + index * (94 / (count - 1)))
+  }
+
+  function mobileXPositions(count) {
+    if (count === 1) return [50]
+    return Array.from({ length: count }, (_, index) => 4 + index * (92 / (count - 1)))
   }
 
   function coords(roundIndex, side, index) {
@@ -380,6 +1079,7 @@ export default function (component) {
         setTriggerValue("pick", {
           ...clickInfo,
           winner_code: code,
+          scroll_left: scroll.scrollLeft,
           nonce: Date.now(),
         })
       }
@@ -433,6 +1133,190 @@ export default function (component) {
   function currentWinner(phaseKey, matchNumber) {
     const phaseWinners = winnerArrays[phaseKey] ?? []
     return phaseWinners[matchNumber - 1] ?? null
+  }
+
+  function drawMobileBracket(scrollElement) {
+    const frame = document.createElement("div")
+    frame.className = "bracket-frame mobile-bracket-frame"
+
+    const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg")
+    svg.setAttribute("class", "connector-layer")
+    svg.setAttribute("viewBox", "0 0 100 100")
+    svg.setAttribute("preserveAspectRatio", "none")
+
+    const mobileRounds = {
+      top: [
+        normalizeArray(initial.slice(0, 16), 16),
+        winnerArrays.dezesseis_avos.slice(0, 8),
+        winnerArrays.oitavas.slice(0, 4),
+        winnerArrays.quartas.slice(0, 2),
+        winnerArrays.semifinais.slice(0, 1),
+      ],
+      bottom: [
+        normalizeArray(initial.slice(16, 32), 16),
+        winnerArrays.dezesseis_avos.slice(8, 16),
+        winnerArrays.oitavas.slice(4, 8),
+        winnerArrays.quartas.slice(2, 4),
+        winnerArrays.semifinais.slice(1, 2),
+      ],
+    }
+    const yBySide = {
+      top: [7, 15, 25, 35, 43],
+      bottom: [93, 85, 75, 65, 57],
+    }
+    const sizes = [48, 58, 66, 82, 76]
+
+    for (const side of ["top", "bottom"]) {
+      for (let roundIndex = 0; roundIndex < 4; roundIndex += 1) {
+        const current = mobileRounds[side][roundIndex]
+        const next = mobileRounds[side][roundIndex + 1]
+        for (let matchIndex = 0; matchIndex < current.length / 2; matchIndex += 1) {
+          const first = mobileCoords(mobileRounds, yBySide, roundIndex, side, matchIndex * 2)
+          const second = mobileCoords(mobileRounds, yBySide, roundIndex, side, matchIndex * 2 + 1)
+          const target = mobileCoords(mobileRounds, yBySide, roundIndex + 1, side, matchIndex)
+          const active = Boolean(next[matchIndex])
+          appendMobileConnector(svg, first, target, active)
+          appendMobileConnector(svg, second, target, active)
+        }
+      }
+    }
+
+    const topFinalist = mobileRounds.top[4][0]
+    const bottomFinalist = mobileRounds.bottom[4][0]
+    const champion = winnerArrays.final[0]
+    appendMobileConnector(svg, mobileCoords(mobileRounds, yBySide, 4, "top", 0), { x: 50, y: 50 }, Boolean(champion && topFinalist))
+    appendMobileConnector(svg, mobileCoords(mobileRounds, yBySide, 4, "bottom", 0), { x: 50, y: 50 }, Boolean(champion && bottomFinalist))
+
+    frame.appendChild(svg)
+
+    for (const side of ["top", "bottom"]) {
+      for (let roundIndex = 0; roundIndex < mobileRounds[side].length; roundIndex += 1) {
+        const values = mobileRounds[side][roundIndex]
+        values.forEach((code, index) => {
+          const labelIndex = side === "top" ? index : index + 16
+          frame.appendChild(
+            createMobileNode(
+              code,
+              roundIndex,
+              side,
+              index,
+              mobileCoords(mobileRounds, yBySide, roundIndex, side, index),
+              sizes[roundIndex],
+              roundIndex === 0 ? initialLabels[labelIndex] : "",
+              mobileRounds,
+            )
+          )
+        })
+      }
+    }
+
+    drawMobileChampion(frame, champion)
+    scrollElement.appendChild(frame)
+  }
+
+  function mobileCoords(mobileRounds, yBySide, roundIndex, side, index) {
+    return {
+      x: mobileXPositions(mobileRounds[side][roundIndex].length)[index],
+      y: yBySide[side][roundIndex],
+    }
+  }
+
+  function appendMobileConnector(svgElement, start, end, active) {
+    const elbowY = (start.y + end.y) / 2
+    const path = document.createElementNS("http://www.w3.org/2000/svg", "path")
+    path.setAttribute("d", `M ${start.x} ${start.y} V ${elbowY} H ${end.x} V ${end.y}`)
+    if (active) path.setAttribute("class", "active")
+    svgElement.appendChild(path)
+  }
+
+  function createMobileNode(code, roundIndex, side, index, position, size, seedLabel, mobileRounds) {
+    const clickInfo = mobileClickPayload(roundIndex, side, index, mobileRounds)
+    const isSelectable = Boolean(code && clickInfo)
+    const selected = Boolean(clickInfo && currentWinner(clickInfo.phase_key, clickInfo.match_number) === code)
+    const node = document.createElement(isSelectable ? "button" : "div")
+    node.className = [
+      "mobile-bracket-node",
+      side,
+      code ? "filled" : "placeholder",
+      isSelectable ? "selectable" : "",
+      selected ? "selected" : "",
+    ].filter(Boolean).join(" ")
+    node.style.left = `${position.x}%`
+    node.style.top = `${position.y}%`
+    node.style.setProperty("--mobile-node-size", `${size}px`)
+
+    if (isSelectable) {
+      const item = team(code)
+      node.type = "button"
+      node.title = `Escolher ${item.name}`
+      node.setAttribute("aria-label", `Escolher ${item.name}`)
+      node.onclick = () => {
+        setTriggerValue("pick", {
+          ...clickInfo,
+          winner_code: code,
+          scroll_left: scroll.scrollLeft,
+          nonce: Date.now(),
+        })
+      }
+    }
+
+    if (seedLabel) {
+      const label = document.createElement("span")
+      label.className = `mobile-seed-label ${side}`
+      label.textContent = seedLabel
+      node.appendChild(label)
+    }
+
+    node.appendChild(flagCircle(team(code).flag))
+    return node
+  }
+
+  function mobileClickPayload(roundIndex, side, index, mobileRounds) {
+    if (roundIndex === 4) {
+      const finalists = [mobileRounds.top[4][0], mobileRounds.bottom[4][0]]
+      if (!finalists[0] || !finalists[1]) return null
+      return { phase_key: "final", match_number: 1 }
+    }
+
+    const phaseKey = phases[roundIndex]
+    const current = mobileRounds[side][roundIndex]
+    const matchInSide = Math.floor(index / 2)
+    const pair = [current[matchInSide * 2], current[matchInSide * 2 + 1]]
+    if (!phaseKey || !pair[0] || !pair[1]) return null
+    const matchesPerSide = current.length / 2
+    const matchNumber = matchInSide + 1 + (side === "bottom" ? matchesPerSide : 0)
+    return { phase_key: phaseKey, match_number: matchNumber }
+  }
+
+  function drawMobileChampion(frameElement, championCode) {
+    const help = document.createElement("div")
+    help.className = "mobile-help"
+    help.innerHTML = "Clique nos vencedores<br>de cada confronto, para<br>fazer a sua simulação."
+    frameElement.appendChild(help)
+
+    const area = document.createElement("div")
+    area.className = "mobile-champion-area"
+    const championNode = document.createElement("div")
+    championNode.className = "mobile-champion-node"
+    if (championCode) {
+      championNode.appendChild(flagCircle(team(championCode).flag))
+    } else {
+      const circle = flagCircle("")
+      const trophy = document.createElement("span")
+      trophy.className = "mobile-trophy"
+      trophy.textContent = "🏆"
+      circle.appendChild(trophy)
+      championNode.appendChild(circle)
+    }
+    area.appendChild(championNode)
+    frameElement.appendChild(area)
+  }
+
+  function restoreScroll(scrollElement) {
+    if (!scrollLeft) return
+    requestAnimationFrame(() => {
+      scrollElement.scrollLeft = scrollLeft
+    })
   }
 
   function drawChampion(frameElement, championCode) {
@@ -797,12 +1681,27 @@ def inject_styles() -> None:
                 padding-left: 1rem;
                 padding-right: 1rem;
             }
+            div[data-testid="stHorizontalBlock"] {
+                flex-direction: column;
+            }
+            div[data-testid="stHorizontalBlock"] > div[data-testid="column"] {
+                flex: 1 1 100% !important;
+                min-width: 100% !important;
+                width: 100% !important;
+            }
             .topbar {
                 margin-left: -1rem;
                 margin-right: -1rem;
             }
             .hero h1 {
                 font-size: 30px;
+            }
+            .section-title.mobile-reference-title {
+                border-bottom: 0;
+                font-size: 44px;
+                font-weight: 500;
+                margin: 30px 0 22px;
+                padding-bottom: 0;
             }
             .seed-board {
                 grid-template-columns: 1fr;
@@ -869,6 +1768,42 @@ def sync_group_position(group_code: str, team_code: str) -> None:
     clear_knockout_state()
 
 
+def read_component_trigger(component_key: str, trigger_key: str) -> dict[str, object] | None:
+    component_state = st.session_state.get(component_key)
+    trigger_value = getattr(component_state, trigger_key, None)
+    if trigger_value is None and isinstance(component_state, dict):
+        trigger_value = component_state.get(trigger_key)
+    return trigger_value if isinstance(trigger_value, dict) else None
+
+
+def handle_groups_action() -> None:
+    event = read_component_trigger("groups_selector", "action")
+    if not event:
+        return
+
+    action = str(event.get("action", ""))
+    group_code = str(event.get("group_code", ""))
+    if group_code not in {group.code for group in GROUPS}:
+        return
+
+    st.session_state[ACTIVE_GROUP_KEY] = group_code
+    group = find_group(group_code)
+    valid_team_codes = {team.code for team in group.teams}
+
+    if action == "randomize":
+        randomize_group(group_code)
+        return
+
+    if action == "pick":
+        team_code = str(event.get("team_code", ""))
+        selected_label = str(event.get("selected_label", ""))
+        if team_code not in valid_team_codes or selected_label not in GROUP_POSITION_BY_LABEL:
+            return
+
+        st.session_state[group_rank_key(group_code, team_code)] = selected_label
+        sync_group_position(group_code, team_code)
+
+
 def randomize_group(group_code: str) -> None:
     group = find_group(group_code)
     shuffled_codes = [team.code for team in group.teams]
@@ -891,60 +1826,44 @@ def group_selection(group: Group) -> dict[str, str | None]:
     return selection
 
 
-def render_group_selector(group: Group) -> dict[str, str | None]:
-    render_html(
-        f"""
-        <div class="group-shell">
-            <div class="group-heading">Grupo {group.code}</div>
-        </div>
-        """
-    )
-    header_cols = st.columns([1.45, 1], vertical_alignment="center", gap="small")
-    with header_cols[0]:
-        render_html('<div class="group-table-head">Seleção</div>')
-    with header_cols[1]:
-        render_html(
-            """
-            <div class="group-table-head group-position-head">
-                <span>Posição:</span><b>1º</b><b>2º</b>
-            </div>
-            """
-        )
+def groups_payload() -> list[dict[str, object]]:
+    return [
+        {
+            "code": group.code,
+            "teams": [
+                {"code": team.code, "flag": team.flag, "name": team.name}
+                for team in group.teams
+            ],
+        }
+        for group in GROUPS
+    ]
 
-    for team in group.teams:
-        row_cols = st.columns([1.45, 1], vertical_alignment="center", gap="small")
-        with row_cols[0]:
-            render_html(
-                f"""
-                <div class="team-band">
-                    <span class="flag">{team.flag}</span>
-                    <span>{team.name}</span>
-                </div>
-                """
-            )
-        with row_cols[1]:
-            st.radio(
-                f"{team.name} no Grupo {group.code}",
-                GROUP_POSITION_LABELS,
-                index=None,
-                key=group_rank_key(group.code, team.code),
-                horizontal=True,
-                label_visibility="collapsed",
-                on_change=sync_group_position,
-                args=(group.code, team.code),
-                width="stretch",
-            )
 
-    st.button(
-        "SORTEIO ALEATÓRIO",
-        key=f"randomize_group_{group.code}",
-        icon=":material/shuffle:",
-        on_click=randomize_group,
-        args=(group.code,),
-        type="primary",
-        width="stretch",
+def selected_by_group_payload() -> dict[str, dict[str, str | None]]:
+    return {
+        group.code: {
+            team.code: st.session_state.get(group_rank_key(group.code, team.code))
+            for team in group.teams
+        }
+        for group in GROUPS
+    }
+
+
+def render_groups_selector() -> dict[str, dict[str, str | None]]:
+    if st.session_state.get(ACTIVE_GROUP_KEY) not in {group.code for group in GROUPS}:
+        st.session_state[ACTIVE_GROUP_KEY] = GROUPS[0].code
+
+    GROUPS_SELECTOR_COMPONENT(
+        key="groups_selector",
+        data={
+            "groups": groups_payload(),
+            "positions": GROUP_POSITION_LABELS,
+            "selected_by_group": selected_by_group_payload(),
+            "current_group": st.session_state[ACTIVE_GROUP_KEY],
+        },
+        on_action_change=handle_groups_action,
     )
-    return group_selection(group)
+    return {group.code: group_selection(group) for group in GROUPS}
 
 
 def render_qualified(qualified: dict[str, list[dict[str, str]]]) -> None:
@@ -965,11 +1884,7 @@ def set_knockout_winner(phase_key: str, match_number: int, winner_code: str) -> 
 
 
 def read_component_pick() -> dict[str, object] | None:
-    component_state = st.session_state.get("knockout_bracket_component")
-    pick = getattr(component_state, "pick", None)
-    if pick is None and isinstance(component_state, dict):
-        pick = component_state.get("pick")
-    return pick if isinstance(pick, dict) else None
+    return read_component_trigger("knockout_bracket_component", "pick")
 
 
 def handle_bracket_pick() -> None:
@@ -979,6 +1894,11 @@ def handle_bracket_pick() -> None:
 
     phase_key = str(pick.get("phase_key", ""))
     winner_code = str(pick.get("winner_code", ""))
+    try:
+        st.session_state[KNOCKOUT_SCROLL_KEY] = max(0, int(float(pick.get("scroll_left", 0))))
+    except (TypeError, ValueError):
+        st.session_state[KNOCKOUT_SCROLL_KEY] = 0
+
     try:
         match_number = int(pick.get("match_number", 0))
     except (TypeError, ValueError):
@@ -1037,17 +1957,35 @@ def teams_payload() -> dict[str, dict[str, str]]:
     }
 
 
-def render_knockout(initial_codes: list[str]) -> dict[str, list[str | None]]:
+def initial_labels_for_codes(initial_codes: list[str], selections: dict[str, dict[str, str | None]]) -> list[str]:
+    group_by_team = {team.code: group.code for group in GROUPS for team in group.teams}
+    labels: list[str] = []
+
+    for code in initial_codes:
+        group_code = group_by_team.get(code, "")
+        group_selection = selections.get(group_code, {})
+        if group_selection.get("first") == code:
+            labels.append(f"1{group_code}")
+        elif group_selection.get("second") == code:
+            labels.append(f"2{group_code}")
+        else:
+            labels.append("3º")
+
+    return labels
+
+
+def render_knockout(initial_codes: list[str], initial_labels: list[str]) -> dict[str, list[str | None]]:
     winners_by_phase = build_knockout_state(initial_codes)
     KNOCKOUT_BRACKET_COMPONENT(
         key="knockout_bracket_component",
         data={
             "initial": initial_codes,
+            "initial_labels": initial_labels,
+            "scroll_left": st.session_state.get(KNOCKOUT_SCROLL_KEY, 0),
             "phases": [phase_key for phase_key, _phase_label in KNOCKOUT_PHASES],
             "winners": component_winners(winners_by_phase),
             "teams": teams_payload(),
         },
-        height=850,
         on_pick_change=handle_bracket_pick,
     )
     return winners_by_phase
@@ -1075,13 +2013,8 @@ def main() -> None:
     with col_email:
         email = st.text_input("E-mail")
 
-    render_html('<div class="section-title">Grupos</div>')
-    selections: dict[str, dict[str, str | None]] = {}
-    for row_start in range(0, len(GROUPS), 3):
-        cols = st.columns(3)
-        for col, group in zip(cols, GROUPS[row_start : row_start + 3]):
-            with col:
-                selections[group.code] = render_group_selector(group)
+    render_html('<div class="section-title mobile-reference-title">Grupos</div>')
+    selections = render_groups_selector()
 
     participant_errors = validate_participant(name, phone, email)
     selection_errors = validate_selections(selections)
@@ -1093,9 +2026,12 @@ def main() -> None:
     if not selection_errors:
         qualified = build_qualified(selections, seed=2026)
         render_qualified(qualified)
-        render_html('<div class="section-title">Mata-mata</div>')
-        initial_codes = [team["code"] for team in qualified["all"]]
-        knockout_winners = render_knockout(initial_codes)
+        render_html('<div class="section-title mobile-reference-title">Mata-mata</div>')
+        initial_codes = build_official_knockout_order(
+            selections,
+            [team["code"] for team in qualified["thirds"]],
+        )
+        knockout_winners = render_knockout(initial_codes, initial_labels_for_codes(initial_codes, selections))
     else:
         st.info("Complete 1º e 2º lugar em todos os grupos para ver os classificados.")
 
@@ -1111,7 +2047,10 @@ def main() -> None:
 
         if qualified is None:
             qualified = build_qualified(selections, seed=2026)
-            initial_codes = [team["code"] for team in qualified["all"]]
+            initial_codes = build_official_knockout_order(
+                selections,
+                [team["code"] for team in qualified["thirds"]],
+            )
 
         knockout = serialize_knockout(initial_codes, knockout_winners)
 

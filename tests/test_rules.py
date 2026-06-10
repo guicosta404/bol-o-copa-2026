@@ -4,8 +4,12 @@ import pytest
 
 from src.groups import GROUPS
 from src.rules import (
+    GROUP_CODES,
     KNOCKOUT_PHASES,
+    OFFICIAL_ROUND_OF_32_MATCHES,
+    assign_third_place_slots,
     build_knockout_matches,
+    build_official_knockout_order,
     build_qualified,
     draw_best_thirds,
     serialize_knockout,
@@ -78,6 +82,15 @@ def test_draw_best_thirds_excludes_selected_firsts_and_seconds() -> None:
     assert {team.code for team in draw}.isdisjoint(direct_qualifier_codes)
 
 
+def test_draw_best_thirds_uses_eight_distinct_groups() -> None:
+    selections = valid_selections()
+    group_by_team = {team.code: group.code for group in GROUPS for team in group.teams}
+
+    draw = draw_best_thirds(selections, seed=2026)
+
+    assert len({group_by_team[team.code] for team in draw}) == 8
+
+
 def test_build_qualified_returns_32_teams() -> None:
     qualified = build_qualified(valid_selections(), seed=2026)
 
@@ -93,6 +106,73 @@ def test_build_qualified_raises_for_invalid_selection() -> None:
 
     with pytest.raises(ValueError):
         build_qualified(selections)
+
+
+def test_official_round_of_32_order_preserves_fifa_pairing_tree() -> None:
+    match_numbers = [match.match_number for match in OFFICIAL_ROUND_OF_32_MATCHES]
+
+    assert match_numbers == [73, 75, 74, 77, 83, 84, 81, 82, 76, 78, 79, 80, 86, 88, 85, 87]
+    assert list(zip(match_numbers[::2], match_numbers[1::2])) == [
+        (73, 75),
+        (74, 77),
+        (83, 84),
+        (81, 82),
+        (76, 78),
+        (79, 80),
+        (86, 88),
+        (85, 87),
+    ]
+
+
+def test_assign_third_place_slots_accepts_every_possible_group_combination() -> None:
+    from itertools import combinations
+
+    for third_groups in combinations(GROUP_CODES, 8):
+        assignments = assign_third_place_slots(third_groups)
+
+        assert sorted(assignments.values()) == sorted(third_groups)
+
+
+def test_assign_third_place_slots_uses_annex_c_assignments() -> None:
+    header_match_indexes = {"A": 10, "B": 14, "D": 6, "E": 2, "G": 7, "I": 3, "K": 15, "L": 11}
+
+    first_combination = assign_third_place_slots("EFGHIJKL")
+    mid_combination = assign_third_place_slots("ABCDEFGH")
+
+    assert {header: first_combination[index] for header, index in header_match_indexes.items()} == {
+        "A": "E",
+        "B": "J",
+        "D": "I",
+        "E": "F",
+        "G": "H",
+        "I": "G",
+        "K": "L",
+        "L": "K",
+    }
+    assert {header: mid_combination[index] for header, index in header_match_indexes.items()} == {
+        "A": "H",
+        "B": "G",
+        "D": "B",
+        "E": "C",
+        "G": "A",
+        "I": "F",
+        "K": "D",
+        "L": "E",
+    }
+
+
+def test_build_official_knockout_order_uses_fifa_round_of_32_slots() -> None:
+    selections = valid_selections()
+    third_codes = [group.teams[2].code for group in GROUPS[:8]]
+
+    initial_codes = build_official_knockout_order(selections, third_codes)
+
+    assert len(initial_codes) == 32
+    assert len(set(initial_codes)) == 32
+    assert build_knockout_matches(initial_codes)[:2] == [
+        ("RSA", "BIH"),
+        ("NED", "MAR"),
+    ]
 
 
 def test_build_knockout_matches_pairs_teams_in_order() -> None:
