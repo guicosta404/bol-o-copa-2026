@@ -1,10 +1,16 @@
 from __future__ import annotations
 
 import random
+import sys
 from datetime import datetime, timezone
+from pathlib import Path
 from textwrap import dedent
 
 import streamlit as st
+
+ROOT_DIR = Path(__file__).resolve().parent
+if str(ROOT_DIR) not in sys.path:
+    sys.path.insert(0, str(ROOT_DIR))
 
 from src.groups import GROUPS, Group, team_lookup
 from src.rules import (
