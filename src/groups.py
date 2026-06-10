@@ -16,6 +16,9 @@ class Group:
     teams: tuple[Team, ...]
 
 
+SCOTLAND_FLAG = "\U0001F3F4\U000E0067\U000E0062\U000E0073\U000E0063\U000E0074\U000E007F"
+ENGLAND_FLAG = "\U0001F3F4\U000E0067\U000E0062\U000E0065\U000E006E\U000E0067\U000E007F"
+
 GROUPS: tuple[Group, ...] = (
     Group(
         "A",
@@ -41,7 +44,7 @@ GROUPS: tuple[Group, ...] = (
             Team("BRA", "Brasil", "🇧🇷"),
             Team("MAR", "Marrocos", "🇲🇦"),
             Team("HAI", "Haiti", "🇭🇹"),
-            Team("SCO", "Escocia", "🏴"),
+            Team("SCO", "Escocia", SCOTLAND_FLAG),
         ),
     ),
     Group(
@@ -119,7 +122,7 @@ GROUPS: tuple[Group, ...] = (
     Group(
         "L",
         (
-            Team("ENG", "Inglaterra", "🏴"),
+            Team("ENG", "Inglaterra", ENGLAND_FLAG),
             Team("CRO", "Croacia", "🇭🇷"),
             Team("GHA", "Gana", "🇬🇭"),
             Team("PAN", "Panama", "🇵🇦"),

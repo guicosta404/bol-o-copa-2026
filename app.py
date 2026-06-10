@@ -136,6 +136,62 @@ GROUPS_SELECTOR_CSS = """
     line-height: 1;
 }
 
+.flag-art {
+    border: 1px solid rgba(0, 0, 0, .18);
+    border-radius: 2px;
+    display: inline-block;
+    overflow: hidden;
+    position: relative;
+}
+
+.group-flag .flag-art {
+    height: 18px;
+    width: 28px;
+}
+
+.flag-circle .flag-art {
+    height: calc(var(--node-size) * .34);
+    width: calc(var(--node-size) * .52);
+}
+
+.flag-england {
+    background: #ffffff;
+}
+
+.flag-england::before,
+.flag-england::after,
+.flag-scotland::before {
+    content: "";
+    position: absolute;
+}
+
+.flag-england::before {
+    background: #cf142b;
+    height: 28%;
+    left: 0;
+    top: 36%;
+    width: 100%;
+}
+
+.flag-england::after {
+    background: #cf142b;
+    height: 100%;
+    left: 42%;
+    top: 0;
+    width: 16%;
+}
+
+.flag-scotland {
+    background: #005eb8;
+}
+
+.flag-scotland::before {
+    background:
+        linear-gradient(to bottom right, transparent 43%, #ffffff 43%, #ffffff 57%, transparent 57%),
+        linear-gradient(to top right, transparent 43%, #ffffff 43%, #ffffff 57%, transparent 57%);
+    inset: 0;
+}
+
 .group-name {
     line-height: 1.15;
     min-width: 0;
@@ -331,6 +387,11 @@ GROUPS_SELECTOR_CSS = """
         font-size: 27px;
     }
 
+    .group-flag .flag-art {
+        height: 24px;
+        width: 36px;
+    }
+
     .group-name {
         overflow: visible;
         text-overflow: clip;
@@ -465,7 +526,7 @@ export default function (component) {
     const teamCell = el("div", "group-team")
 
     const flag = el("span", "group-flag")
-    flag.textContent = team.flag ?? ""
+    flag.appendChild(flagContent(team.flag, team.code))
     teamCell.appendChild(flag)
 
     const name = el("span", "group-name")
@@ -1094,9 +1155,9 @@ export default function (component) {
     const item = team(code)
     if (side === "left") {
       node.appendChild(codeLabel(item.code))
-      node.appendChild(flagCircle(item.flag))
+      node.appendChild(flagCircle(item.flag, item.code))
     } else {
-      node.appendChild(flagCircle(item.flag))
+      node.appendChild(flagCircle(item.flag, item.code))
       node.appendChild(codeLabel(item.code))
     }
     return node
@@ -1109,14 +1170,31 @@ export default function (component) {
     return label
   }
 
-  function flagCircle(flag) {
+  function flagCircle(flag, code = "") {
     const circle = document.createElement("span")
     circle.className = "flag-circle"
+    circle.appendChild(flagContent(flag, code))
+    return circle
+  }
+
+  function flagContent(flag, code = "") {
+    const custom = customFlag(code)
+    if (custom) return custom
+
     const value = document.createElement("span")
     value.className = "flag-value"
     value.textContent = flag ?? ""
-    circle.appendChild(value)
-    return circle
+    return value
+  }
+
+  function customFlag(code = "") {
+    const normalized = String(code ?? "").toUpperCase()
+    if (normalized !== "ENG" && normalized !== "SCO") return null
+
+    const value = document.createElement("span")
+    value.className = `flag-value flag-art ${normalized === "ENG" ? "flag-england" : "flag-scotland"}`
+    value.setAttribute("aria-hidden", "true")
+    return value
   }
 
   function clickPayload(roundIndex, side, index) {
@@ -1273,7 +1351,8 @@ export default function (component) {
       node.appendChild(label)
     }
 
-    node.appendChild(flagCircle(team(code).flag))
+    const item = team(code)
+    node.appendChild(flagCircle(item.flag, item.code))
     return node
   }
 
@@ -1305,7 +1384,8 @@ export default function (component) {
     const championNode = document.createElement("div")
     championNode.className = "mobile-champion-node"
     if (championCode) {
-      championNode.appendChild(flagCircle(team(championCode).flag))
+      const item = team(championCode)
+      championNode.appendChild(flagCircle(item.flag, item.code))
     } else {
       const circle = flagCircle("")
       const trophy = document.createElement("span")
@@ -1347,7 +1427,7 @@ export default function (component) {
     trophy.textContent = "🏆"
     const championNode = document.createElement("div")
     championNode.className = "champion-node"
-    championNode.appendChild(flagCircle(item.flag))
+    championNode.appendChild(flagCircle(item.flag, item.code))
     const label = document.createElement("div")
     label.className = "champion-label"
     label.innerHTML = `Campeã<br>${item.name}`
