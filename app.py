@@ -562,6 +562,26 @@ export default function (component) {
     return row
   }
 
+  function flagContent(flag, code = "") {
+    const custom = customFlag(code)
+    if (custom) return custom
+
+    const value = document.createElement("span")
+    value.className = "flag-value"
+    value.textContent = flag ?? ""
+    return value
+  }
+
+  function customFlag(code = "") {
+    const normalized = String(code ?? "").toUpperCase()
+    if (normalized !== "ENG" && normalized !== "SCO") return null
+
+    const value = document.createElement("span")
+    value.className = `flag-value flag-art ${normalized === "ENG" ? "flag-england" : "flag-scotland"}`
+    value.setAttribute("aria-hidden", "true")
+    return value
+  }
+
   function el(tagName, className) {
     const node = document.createElement(tagName)
     if (Array.isArray(className)) {
