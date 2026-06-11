@@ -17,12 +17,25 @@ alter table public.palpites
 
 alter table public.palpites enable row level security;
 
-grant insert on public.palpites to anon;
+revoke all on table public.palpites from public, anon, authenticated;
+
+grant usage on schema public to anon, authenticated;
+grant insert on table public.palpites to anon, authenticated;
 
 drop policy if exists "anon can insert palpites" on public.palpites;
+drop policy if exists "public can insert palpites" on public.palpites;
 
-create policy "anon can insert palpites"
+create policy "public can insert palpites"
 on public.palpites
 for insert
-to anon
-with check (true);
+to anon, authenticated
+with check (
+  length(btrim(nome)) > 0
+  and length(btrim(telefone)) > 0
+  and email ~* '^[^@\s]+@[^@\s]+\.[^@\s]+$'
+  and jsonb_typeof(selecoes) = 'object'
+  and jsonb_typeof(terceiros_sorteados) = 'array'
+  and jsonb_typeof(classificados) = 'array'
+  and jsonb_typeof(mata_mata) = 'object'
+  and jsonb_typeof(campeao) = 'object'
+);
